@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  COCINA
+  MESERO
+}
+
+enum SubscriptionPlan {
+  MENSUAL
+}
+
+enum SubscriptionStatus {
+  ACTIVA
+  SUSPENDIDA
+  PRUEBA
+  CANCELADA
+}
+
+enum OrderStatus {
+  RECIBIDO
+  EN_PREPARACION
+  LISTO
+  ENTREGADO
+  CANCELADO
+}
+
+enum AlertType {
+  MESERO
+  CUENTA
+}
+
+enum AlertStatus {
+  PENDIENTE
+  ATENDIDA
+}
+
+enum PaymentMethod {
+  NEQUI
+  DAVIPLATA
+  EFECTIVO
+  TARJETA
+}
+
+enum PaymentStatus {
+  PENDIENTE
+  CONFIRMADO
+  RECHAZADO
+}
+
+enum SplitMode {
+  POR_ITEMS
+  IGUAL
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(MESERO)
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([restaurantId])
+}
+
+model Restaurant {
+  id                 String             @id @default(cuid())
+  name               String
+  slug               String             @unique
+  description        String?
+  address            String?
+  city               String             @default("El Banco")
+  department         String             @default("Magdalena")
+  phone              String?
+  logoUrl            String?
+  primaryColor       String             @default("#0B6E4F")
+  accentColor        String             @default("#E85D04")
+  subscriptionPlan   SubscriptionPlan   @default(MENSUAL)
+  subscriptionStatus SubscriptionStatus @default(PRUEBA)
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  users      User[]
+  categories Category[]
+  dishes     Dish[]
+  tables     Table[]
+  sessions   TableSession[]
+  orders     Order[]
+  alerts     StaffAlert[]
+  payments   Payment[]
+}
+
+model Category {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  sortOrder    Int        @default(0)
+  dishes       Dish[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([restaurantId])
+}
+
+model Dish {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId   String
+  category     Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  priceCops    Int
+  imageUrl     String?
+  modelGlbUrl  String?
+  modelUsdzUrl String?
+  soldOut      Boolean    @default(false)
+  available    Boolean    @default(true)
+  sortOrder    Int        @default(0)
+  orderItems   OrderItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([restaurantId])
+  @@index([categoryId])
+}
+
+model Table {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code         String
+  label        String
+  active       Boolean    @default(true)
+  sessions     TableSession[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([restaurantId, code])
+  @@index([restaurantId])
+}
+
+model TableSession {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tableId      String
+  table        Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  open         Boolean    @default(true)
+  tipPercent   Int        @default(0)
+  splitMode    SplitMode  @default(POR_ITEMS)
+  orders       Order[]
+  alerts       StaffAlert[]
+  payments     Payment[]
+  diners       SessionDiner[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  closedAt     DateTime?
+
+  @@index([restaurantId, open])
+  @@index([tableId])
+}
+
+model SessionDiner {
+  id        String       @id @default(cuid())
+  sessionId String
+  session   TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name      String
+  clientKey String
+  createdAt DateTime     @default(now())
+
+  orderItems OrderItem[]
+
+  @@unique([sessionId, clientKey])
+  @@index([sessionId])
+}
+
+model Order {
+  id           String       @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sessionId    String
+  session      TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status       OrderStatus  @default(RECIBIDO)
+  note         String?
+  items        OrderItem[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([restaurantId, status])
+  @@index([sessionId])
+}
+
+model OrderItem {
+  id        String       @id @default(cuid())
+  orderId   String
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dishId    String
+  dish      Dish         @relation(fields: [dishId], references: [id])
+  dinerId   String?
+  diner     SessionDiner? @relation(fields: [dinerId], references: [id], onDelete: SetNull)
+  quantity  Int          @default(1)
+  unitPrice Int
+  note      String?
+  createdAt DateTime     @default(now())
+
+  @@index([orderId])
+  @@index([dinerId])
+}
+
+model StaffAlert {
+  id           String       @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sessionId    String
+  session      TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type         AlertType
+  status       AlertStatus  @default(PENDIENTE)
+  message      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([restaurantId, status])
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sessionId    String
+  session      TableSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  dinerName    String?
+  method       PaymentMethod
+  amountCops   Int
+  tipCops      Int           @default(0)
+  status       PaymentStatus @default(PENDIENTE)
+  providerRef  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([restaurantId])
+  @@index([sessionId])
+}
